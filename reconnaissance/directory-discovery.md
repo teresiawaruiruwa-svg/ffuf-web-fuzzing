@@ -1,31 +1,21 @@
 # Directory and file discovery
 
 ## Objective
-
-Identify discoverable web paths and files by placing `FUZZ` in the URL path.
+Identify discoverable web paths and files by placing FUZZ in the URL path.
 
 ## Command pattern
+    ffuf -w /path/to/directory-wordlist.txt -u http://<TARGET>:<PORT>/FUZZ
 
-```bash
-ffuf -w /path/to/directory-wordlist.txt \
-  -u http://<TARGET>:<PORT>/FUZZ
-```
+Use -ic when the wordlist contains comment lines that should be ignored. Screenshot 01 records a comment line being processed because this option was not used in that run.
 
 ## Observations from the screenshots
-
-The supplied terminal captures show directory discovery against a lab web server. Paths returned in the displayed results include:
-
-- `/forum`
-- `/blog`
-- `/home.php`
-- `/forum/flag.php`
-
-Different requests produced different status codes. One screenshot shows a `200` response for a discovered forum flag endpoint; another shows a `200` response for `home.php`.
+- The initial directory scan shows /forum returning HTTP 301.
+- A follow-up browser/request capture shows content from a page under /blog.
+- A recursive scan identifies /forum/flag.php (HTTP 200, 21 bytes) and /blog/home.php (HTTP 200).
+- Manual validation is shown for the discovered paths. Any flag value is redacted in the published evidence.
 
 ## Interpretation
+A discovered path is a lead for further inspection. Validate it with a direct request, inspect the body and headers, and record whether it is a directory, application page, redirect, or access-controlled resource. A 200 response does not by itself establish that a resource is useful or vulnerable.
 
-A discovered path is a lead for further inspection. Validate it with a direct request, inspect the body and headers, and record whether it is a directory, application page, redirect, or access-controlled resource.
-
-## Evidence to add
-
-Place a sanitized screenshot in `../evidence/screenshots/` and reference it here with a short caption.
+## Evidence
+The screenshot index in evidence/screenshots/README.md maps captures 01–03 to this workflow.
