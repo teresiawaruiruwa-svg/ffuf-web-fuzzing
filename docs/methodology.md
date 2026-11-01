@@ -1,126 +1,40 @@
 # Methodology
 
 ## 1. Scope
+This document records the web fuzzing workflow demonstrated in screenshots from the HTB Academy module Attacking Web Applications with Ffuf.
 
-This document records the web fuzzing workflow demonstrated in the supplied screenshots from the HTB Academy module **Attacking Web Applications with Ffuf**.
-
-The screenshots include several target addresses, ports, and hostnames. The user confirmed that these were captured during the same module and that target IPs changed after occasional lab resets. The report therefore treats the different addresses as session-specific target instances.
+The screenshots include several target addresses, ports, and hostnames. The user confirmed that these were captured during the same module and that target IPs changed after occasional lab resets. The report treats the different addresses as session-specific target instances.
 
 ## 2. Preparation
-
-Before each scan:
-
 1. Confirm the lab target is active.
-2. Record the current IP address, port, and relevant hostname.
+2. Record the current IP address, port, and hostname in private notes.
 3. Confirm the correct wordlist exists locally.
-4. Identify the request method and insertion point (`FUZZ`).
-5. Make a baseline request where response filtering may be needed.
+4. Identify the request method and insertion point (FUZZ).
+5. Measure a baseline where response filtering may be needed.
 6. Keep the test within the authorized lab scope.
 
 ## 3. Directory and file discovery
+Directory discovery places FUZZ in the URL path. Screenshot 01 shows /forum returning 301 and a wordlist comment line being processed because -ic was not used. Screenshots 02 and 03 show follow-up validation under /blog and a recursive scan identifying /forum/flag.php and /blog/home.php. Flag values are redacted in the FFUF evidence.
 
-Directory discovery places the `FUZZ` keyword in the URL path. FFUF substitutes each wordlist entry and records the server response.
+## 4. HTTP virtual-host discovery
+Virtual-host fuzzing places FUZZ in the HTTP Host header. The screenshots show two sessions: an earlier scan used -fs 986 and identified test and admin; a later session measured a nonexistent-host baseline of 985 bytes and used -fs 985, identifying archive, test, and faculty.
 
-Example pattern:
-
-```bash
-ffuf -w /path/to/directory-wordlist.txt \
-  -u http://<TARGET>:<PORT>/FUZZ
-```
-
-The screenshots show directory discovery against a lab web service using a SecLists/DirBuster directory wordlist. Results included paths such as `/forum`, `/blog`, and application files such as `home.php` in the observed lab instances.
-
-A response code alone does not prove that a path is useful. Follow up by requesting the path and inspecting the response.
-
-## 4. Virtual-host discovery
-
-Virtual-host fuzzing places `FUZZ` in the HTTP `Host` header:
-
-```bash
-ffuf -w /path/to/subdomain-wordlist.txt \
-  -u http://<BASE_HOST>:<PORT>/ \
-  -H 'Host: FUZZ.<LAB_DOMAIN>' \
-  -fs <BASELINE_SIZE>
-```
-
-The screenshots show this approach against `academy.htb` and a faculty host, with discovered names including `faculty`, `admin`, `archive`, and `test` in the relevant lab context.
-
-### Baseline response filtering
-
-A request using a deliberately nonexistent hostname was measured with `curl` and `wc -c`. One screenshot records a baseline response size of 985 bytes. The virtual-host scan then used `-fs 985` to suppress responses of that size.
-
-This number is specific to that observed target instance. It must be measured again after a target reset or when the host, port, or application changes.
+These are separate observed session values, not contradictory constants. Re-measure the baseline after a target reset or when the host, port, or application changes.
 
 ## 5. DNS subdomain discovery
-
-DNS subdomain enumeration and HTTP virtual-host enumeration are related but distinct:
-
-- DNS enumeration tests whether names resolve in DNS.
-- Virtual-host enumeration tests how an HTTP server responds to different `Host` header values.
-
-The screenshots show a DNS-style wordlist scan for names associated with `inlanefreight.com`, with results such as `blog`, `support`, and `www`. These results are recorded as an exercise in the module, not as evidence that those names belong to the other `academy.htb` target.
+DNS enumeration tests whether names resolve in DNS. HTTP virtual-host enumeration tests how an HTTP server responds to different Host header values. The screenshots show a DNS-style scan for inlanefreight.com, including blog, support, www, ns3, my, and customer. Do not merge these with academy.htb virtual-host findings.
 
 ## 6. Extension discovery
-
-Extension fuzzing appends candidate extensions to a known or suspected resource name. The screenshots show tests including `.php`, `.php7`, `.phps`, `.aspx`, `.jsp`, and other extensions.
-
-Interpretation should consider:
-- Status code
-- Response size
-- Redirect behavior
-- Whether the response differs from a known missing-resource response
-- Whether the resource can be retrieved in a browser or with a follow-up request
-
-A `200` response with an empty body is not automatically proof of a useful application file. It requires validation.
+The screenshots show tests including .php, .php7, .phps, .aspx, and .jsp. .php and .php7 returned 200 in the captured scan; .phps returned 403; many other candidates returned 404. A later recursive search isolates courses/linux-security.php7, and a manual request returns an access-denied message. A 200 response with an empty body is not proof of a useful file; validate candidates.
 
 ## 7. GET parameter discovery
+The GET parameter screenshot shows a query-string insertion point and a 774-byte response-size filter. One 780-byte outlier is visible, but the parameter name is obscured by a window overlay. The exact GET parameter name is not confirmed by the published capture.
 
-The screenshots show parameter-name fuzzing against a course endpoint using a query-string insertion point:
-
-```bash
-ffuf -w /path/to/burp-parameter-names.txt \
-  -u 'http://<HOST>:<PORT>/courses/<RESOURCE>?FUZZ=key' \
-  -fs <BASELINE_SIZE>
-```
-
-The observed output included parameter candidates such as `user` and `username`. The user then followed up with a request using the discovered parameter.
-
-## 8. POST parameter testing
-
-The screenshots show URL-encoded POST requests and a parameter-name fuzzing workflow against a course endpoint. A manual follow-up request used a `username` field.
-
-General request pattern:
-
-```bash
-curl -s -X POST 'http://<HOST>:<PORT>/<PATH>' \
-  -d 'username=<LAB_TEST_VALUE>' \
-  -H 'Content-Type: application/x-www-form-urlencoded'
-```
-
-The response should be inspected for meaningful application behavior. Do not treat a changed response as proof of a vulnerability without understanding the application logic and confirming the result.
+## 8. POST parameter discovery and value testing
+The POST parameter screenshot clearly shows POST fuzzing with FUZZ=key, application/x-www-form-urlencoded, and -fs 774. It identifies user (780 bytes) and username (781 bytes). A later value-fuzzing screenshot shows JSON output processing to identify a candidate value. The subsequent manual POST request uses username with that candidate value and returns the lab objective response; the flag is redacted.
 
 ## 9. Response analysis
-
-The screenshots include status codes such as `200`, `301`, `302`, `403`, and `404`, as well as response sizes, word counts, line counts, and request durations.
-
-Use these fields as clues, not conclusions:
-
-- `200`: request was handled successfully; the body may still be empty or generic.
-- `301` / `302`: redirection occurred; inspect the `Location` header and decide whether following redirects is appropriate.
-- `403`: the server understood the request but denied access.
-- `404`: the requested resource was not found.
-- Response size: useful for detecting outliers against a baseline, but not sufficient by itself.
+The screenshots include status codes 200, 301, 302, 403, and 404, plus response size, word count, line count, and duration. These are clues, not conclusions. Inspect redirects, compare against a baseline, and validate interesting responses manually.
 
 ## 10. Evidence and reproducibility
-
-For each scan, retain:
-- Date/session context
-- Current lab target identifier (avoid publishing private access details)
-- Command used
-- Wordlist path and source
-- Filters and matchers
-- Relevant output
-- Follow-up validation
-- Short explanation of what was learned
-
-Because target instances changed after resets, historical IPs and ports should not be used as permanent configuration.
+For each scan, retain session context, current lab target identifier in private notes, command, wordlist, filters, output, follow-up validation, and a short explanation. Historical IPs and ports are not permanent configuration. The screenshot index maps captures to the relevant sections and records evidence limitations.
