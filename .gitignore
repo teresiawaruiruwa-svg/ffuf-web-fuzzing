@@ -1,0 +1,21 @@
+# Local outputs and environment-specific files
+*.json
+*.html
+*.log
+.env
+.env.*
+!.env.example
+
+# Local wordlists (install SecLists separately; do not vendor large lists)
+wordlists/
+SecLists/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Evidence that has not been sanitized
+evidence/private/
+evidence/raw/
